@@ -17,10 +17,11 @@ st.subheader("🏙️ Filter by City")
 
 city = st.selectbox(
     "Select a city",
-    df["city"].unique()
+    df["City"].unique()
 )
 
-filtered_df = df[df["city"] == city]
+filtered_df = df[df["City"] == city]
+
 
 st.write(f"Showing data for: **{city}**")
 st.dataframe(filtered_df)
