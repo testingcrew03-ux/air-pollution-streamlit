@@ -42,6 +42,9 @@ pollutant = st.selectbox(
 
 # Filter data for selected city
 filtered_df = df[df["City"] == city]
+# Get latest pollution value
+latest_value = filtered_df.sort_values("date")[pollutant].iloc[-1]
+
 
 # ================= CITY COMPARISON SECTION =================
 if compare:
