@@ -26,15 +26,20 @@ filtered_df = df[df["City"] == city]
 st.write(f"Showing data for: **{city}**")
 st.dataframe(filtered_df)
 # Pollution level chart
-st.subheader("📈 Pollution Levels Over Time")
+# Pollution level chart
+st.subheader("📈 Pollution Levels")
 
-if "date" in filtered_df.columns and "pm2_5" in filtered_df.columns:
-    filtered_df["date"] = pd.to_datetime(filtered_df["date"])
-    filtered_df = filtered_df.sort_values("date")
+chart_data = filtered_df[["PM2.5", "PM10"]]
+st.line_chart(chart_data)
+st.subheader("🚦 Air Quality Status")
 
-    st.line_chart(
-        filtered_df.set_index("date")["pm2_5"]
-    )
+pm25 = filtered_df["PM2.5"].values[0]
+
+if pm25 <= 50:
+    st.success("🟢 Good Air Quality")
+elif pm25 <= 100:
+    st.warning("🟡 Moderate Air Quality")
 else:
-    st.warning("Required columns (date, pm2_5) not found in dataset.")
+    st.error("🔴 Poor Air Quality")
+
 
