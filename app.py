@@ -5,6 +5,9 @@ st.set_page_config(page_title="Air Pollution Monitoring")
 
 st.title("🌍 Air Pollution Monitoring System")
 st.write("This app displays air quality data.")
+st.markdown("---")
+st.markdown("### 🌍 Select Parameters")
+
 
 # Load data
 df = pd.read_csv("air_quality.csv")
@@ -19,8 +22,41 @@ city = st.selectbox(
     "Select a city",
     df["City"].unique()
 )
+pollutant = st.selectbox(
+    "Select Pollutant",
+    ["PM2.5", "PM10"]
+)
+
 
 filtered_df = df[df["City"] == city]
+latest_value = filtered_df[pollutant].values[0]
+st.markdown("---")
+st.markdown("### 📊 Air Quality Overview")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("City", city)
+col2.metric("Pollutant", pollutant)
+col3.metric("Value", latest_value)
+st.markdown("### 🚦 Air Quality Status")
+
+if pollutant == "PM2.5":
+    if latest_value <= 50:
+        st.success("🟢 Good Air Quality")
+    elif latest_value <= 100:
+        st.warning("🟡 Moderate Air Quality")
+    else:
+        st.error("🔴 Poor Air Quality")
+
+elif pollutant == "PM10":
+    if latest_value <= 100:
+        st.success("🟢 Good Air Quality")
+    elif latest_value <= 250:
+        st.warning("🟡 Moderate Air Quality")
+    else:
+        st.error("🔴 Poor Air Quality")
+
+
 
 
 st.write(f"Showing data for: **{city}**")
