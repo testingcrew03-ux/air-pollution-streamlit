@@ -55,6 +55,15 @@ elif pollutant == "PM10":
         st.warning("🟡 Moderate Air Quality")
     else:
         st.error("🔴 Poor Air Quality")
+        st.markdown("### 🩺 Health Advisory")
+
+if latest_value <= 50:
+    st.info("✅ Safe to go outdoors. Enjoy your day!")
+elif latest_value <= 100:
+    st.info("⚠️ Sensitive people should reduce prolonged outdoor exertion.")
+else:
+    st.warning("🚫 Avoid outdoor activities. Wear a mask if going outside.")
+
 
 
 
