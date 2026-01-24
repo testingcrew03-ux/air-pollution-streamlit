@@ -63,6 +63,17 @@ elif latest_value <= 100:
     st.info("⚠️ Sensitive people should reduce prolonged outdoor exertion.")
 else:
     st.warning("🚫 Avoid outdoor activities. Wear a mask if going outside.")
+st.markdown("### 📈 Pollution Trend")
+
+if "date" in filtered_df.columns:
+    filtered_df["date"] = pd.to_datetime(filtered_df["date"])
+    filtered_df = filtered_df.sort_values("date")
+
+    st.line_chart(
+        filtered_df.set_index("date")[pollutant]
+    )
+else:
+    st.line_chart(filtered_df[pollutant])
 
 
 
