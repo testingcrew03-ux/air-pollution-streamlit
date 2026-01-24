@@ -43,7 +43,8 @@ pollutant = st.selectbox(
 # Filter data for selected city
 filtered_df = df[df["City"] == city]
 # Get latest pollution value
-latest_value = filtered_df.sort_values("date")[pollutant].iloc[-1]
+latest_value = filtered_df[pollutant].iloc[-1]
+
 
 
 # ================= CITY COMPARISON SECTION =================
@@ -80,7 +81,8 @@ st.markdown("## 🤖 Air Quality Prediction (Next 7 Days)")
 
 # Use selected city data
 df_city = filtered_df.copy()
-df_city = df_city.sort_values("date")
+df_city = df_city.reset_index(drop=True)
+
 
 # Convert date to numbers for ML
 df_city["day_number"] = np.arange(len(df_city))
