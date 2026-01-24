@@ -41,7 +41,7 @@ pollutant = st.selectbox(
 
 
 # Filter data for selected city
-filtered_df = df[df["city"] == city]
+filtered_df = df[df["City"] == city]
 
 # ================= CITY COMPARISON SECTION =================
 if compare:
