@@ -97,5 +97,7 @@ elif pm25 <= 100:
     st.warning("🟡 Moderate Air Quality")
 else:
     st.error("🔴 Poor Air Quality")
+st.markdown("---")
+st.caption("🌍 Air Pollution Monitoring System | Built using Streamlit")
 
 
