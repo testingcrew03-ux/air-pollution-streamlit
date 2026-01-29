@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
-import plotly.express as px
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="India AQI Prediction", layout="wide")
@@ -53,9 +52,9 @@ city_df = df[df["city"] == city].sort_values("date").reset_index(drop=True)
 latest_pm = city_df["PM2.5"].iloc[-1]
 latest_aqi = int(pm25_to_aqi(latest_pm))
 
-col1, col2 = st.columns(2)
-col1.metric("Latest PM2.5", round(latest_pm, 1))
-col2.metric("Latest AQI", latest_aqi)
+c1, c2 = st.columns(2)
+c1.metric("Latest PM2.5", round(latest_pm, 1))
+c2.metric("Latest AQI", latest_aqi)
 
 # ---------------- HISTORICAL GRAPH ----------------
 st.subheader(f"📈 Historical Pollution — {city}")
@@ -90,24 +89,7 @@ heat["lat"] = heat["city"].map(lambda x: CITY_COORDS.get(x, (None, None))[0])
 heat["lon"] = heat["city"].map(lambda x: CITY_COORDS.get(x, (None, None))[1])
 heat = heat.dropna()
 
-fig = px.scatter_mapbox(
-    heat,
-    lat="lat",
-    lon="lon",
-    size="AQI",
-    color="AQI",
-    hover_name="city",
-    color_continuous_scale="turbo",
-    zoom=4,
-    height=600
-)
-
-fig.update_layout(
-    mapbox_style="carto-darkmatter",
-    margin={"r":0,"t":0,"l":0,"b":0}
-)
-
-st.plotly_chart(fig, use_container_width=True)
+st.map(heat[["lat", "lon"]])
 
 # ---------------- DOWNLOAD ----------------
 output = city_df.copy()
@@ -115,7 +97,7 @@ output["Predicted_PM2.5"] = pm25_pred
 output["Predicted_AQI"] = aqi_pred
 
 st.download_button(
-    label="📥 Download Prediction CSV",
+    "📥 Download Prediction CSV",
     data=output.to_csv(index=False),
     file_name=f"{city}_AQI_prediction.csv",
     mime="text/csv"
