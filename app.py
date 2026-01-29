@@ -7,41 +7,38 @@ from tensorflow.keras.layers import LSTM, Dense
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="India AQI LSTM", layout="wide")
-st.title("🇮🇳 India AQI Prediction System (LSTM)")
+st.title("🇮🇳 India AQI Prediction (LSTM)")
 
-# ---------------- CPCB AQI FUNCTION ----------------
-def calculate_aqi_pm25(pm):
+# ---------- CPCB AQI ----------
+def pm25_aqi(pm):
     if pm <= 30: return pm * 50 / 30
-    elif pm <= 60: return 50 + (pm - 30) * 50 / 30
-    elif pm <= 90: return 100 + (pm - 60) * 100 / 30
-    elif pm <= 120: return 200 + (pm - 90) * 100 / 30
-    elif pm <= 250: return 300 + (pm - 120) * 100 / 130
-    else: return 400 + (pm - 250) * 100 / 130
+    if pm <= 60: return 50 + (pm - 30) * 50 / 30
+    if pm <= 90: return 100 + (pm - 60) * 100 / 30
+    if pm <= 120: return 200 + (pm - 90) * 100 / 30
+    if pm <= 250: return 300 + (pm - 120) * 100 / 130
+    return 400 + (pm - 250) * 100 / 130
 
-# ---------------- FILE UPLOAD ----------------
-file = st.file_uploader("📂 Upload Air Quality CSV", type=["csv"])
+# ---------- Upload ----------
+file = st.file_uploader("Upload AQI CSV", type="csv")
 
 if file:
     df = pd.read_csv(file)
     df["date"] = pd.to_datetime(df["date"])
 
-    city = st.sidebar.selectbox("🏙️ Select City", sorted(df["city"].unique()))
+    city = st.sidebar.selectbox("Select City", sorted(df["city"].unique()))
     city_df = df[df["city"] == city].sort_values("date").reset_index(drop=True)
 
-    st.subheader(f"📊 Historical Pollution — {city}")
+    st.subheader(f"Historical Pollution — {city}")
     st.line_chart(city_df.set_index("date")[["PM2.5","PM10","NO2","SO2","CO"]])
 
-    # ---------------- AQI ----------------
-    city_df["AQI"] = city_df["PM2.5"].apply(calculate_aqi_pm25)
-    st.metric("📌 Latest AQI", int(city_df["AQI"].iloc[-1]))
+    city_df["AQI"] = city_df["PM2.5"].apply(pm25_aqi)
+    st.metric("Latest AQI", int(city_df["AQI"].iloc[-1]))
 
-    # ---------------- LSTM SAFETY CHECK ----------------
     WINDOW = 5
     if len(city_df) <= WINDOW:
-        st.warning(f"⚠️ Need more than {WINDOW} rows for LSTM")
+        st.warning("Not enough data for LSTM")
         st.stop()
 
-    # ---------------- LSTM DATA ----------------
     features = ["PM2.5","PM10","NO2","SO2","CO"]
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(city_df[features])
@@ -53,7 +50,6 @@ if file:
 
     X, y = np.array(X), np.array(y)
 
-    # ---------------- LSTM MODEL ----------------
     model = Sequential([
         LSTM(64, return_sequences=True, input_shape=(WINDOW, len(features))),
         LSTM(32),
@@ -61,37 +57,36 @@ if file:
     ])
 
     model.compile(optimizer="adam", loss="mse")
-    model.fit(X, y, epochs=40, batch_size=4, verbose=0)
+    model.fit(X, y, epochs=30, batch_size=4, verbose=0)
 
-    # ---------------- PREDICTION ----------------
-    last_window = scaled[-WINDOW:]
-    pred_scaled = model.predict(last_window.reshape(1, WINDOW, len(features)))
+    last = scaled[-WINDOW:].reshape(1, WINDOW, len(features))
+    pred = model.predict(last)[0][0]
 
     pm25_pred = scaler.inverse_transform(
-        np.hstack([pred_scaled, np.zeros((1,4))])
-    )[0][0]
+        np.hstack([[pred, 0, 0, 0, 0]])
+    )[0]
 
-    predicted_aqi = int(calculate_aqi_pm25(pm25_pred))
-    st.success(f"🔮 Predicted Next AQI: **{predicted_aqi}**")
+    aqi_pred = int(pm25_aqi(pm25_pred))
+    st.success(f"Predicted Next AQI: {aqi_pred}")
 
-    # ---------------- HEATMAP ----------------
-    st.subheader("🗺️ India AQI Heatmap")
+    # ---------- Heatmap ----------
+    st.subheader("India AQI Heatmap")
     heat = df.groupby("city")["PM2.5"].mean().reset_index()
-    heat["AQI"] = heat["PM2.5"].apply(calculate_aqi_pm25)
+    heat["AQI"] = heat["PM2.5"].apply(pm25_aqi)
 
     fig, ax = plt.subplots()
     ax.barh(heat["city"], heat["AQI"])
     ax.set_xlabel("AQI")
     st.pyplot(fig)
 
-    # ---------------- DOWNLOAD ----------------
-    out = city_df.copy()
-    out["Predicted_Next_PM2.5"] = pm25_pred
-    out["Predicted_Next_AQI"] = predicted_aqi
+    # ---------- Download ----------
+    output = city_df.copy()
+    output["Predicted_PM2.5"] = pm25_pred
+    output["Predicted_AQI"] = aqi_pred
 
-    st.download_button()
-        label="⬇️ Download City AQI CSV",
-        data=out.to_csv(index=False),
-        file_name=f"{city}_AQI_Prediction.csv",
+    st.download_button(
+        "Download AQI CSV",
+        output.to_csv(index=False),
+        file_name=f"{city}_AQI.csv",
         mime="text/csv"
-    
+    )
