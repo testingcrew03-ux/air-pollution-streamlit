@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="India AQI LSTM", layout="wide")
 st.title("🇮🇳 India AQI Prediction System (LSTM)")
 
-# ---------------- CPCB AQI (PM2.5) ----------------
+# ---------------- CPCB AQI FUNCTION ----------------
 def calculate_aqi_pm25(pm):
     if pm <= 30: return pm * 50 / 30
     elif pm <= 60: return 50 + (pm - 30) * 50 / 30
@@ -19,7 +19,7 @@ def calculate_aqi_pm25(pm):
     else: return 400 + (pm - 250) * 100 / 130
 
 # ---------------- FILE UPLOAD ----------------
-file = st.file_uploader("📂 Upload CSV", type=["csv"])
+file = st.file_uploader("📂 Upload Air Quality CSV", type=["csv"])
 
 if file:
     df = pd.read_csv(file)
@@ -28,7 +28,7 @@ if file:
     city = st.sidebar.selectbox("🏙️ Select City", sorted(df["city"].unique()))
     city_df = df[df["city"] == city].sort_values("date").reset_index(drop=True)
 
-    st.subheader(f"📊 Historical Data — {city}")
+    st.subheader(f"📊 Historical Pollution — {city}")
     st.line_chart(city_df.set_index("date")[["PM2.5","PM10","NO2","SO2","CO"]])
 
     # ---------------- AQI ----------------
@@ -38,9 +38,7 @@ if file:
     # ---------------- LSTM SAFETY CHECK ----------------
     WINDOW = 5
     if len(city_df) <= WINDOW:
-        st.warning(
-            f"⚠️ Not enough data for LSTM (need > {WINDOW} rows, found {len(city_df)})"
-        )
+        st.warning(f"⚠️ Need more than {WINDOW} rows for LSTM")
         st.stop()
 
     # ---------------- LSTM DATA ----------------
@@ -68,16 +66,16 @@ if file:
     # ---------------- PREDICTION ----------------
     last_window = scaled[-WINDOW:]
     pred_scaled = model.predict(last_window.reshape(1, WINDOW, len(features)))
+
     pm25_pred = scaler.inverse_transform(
         np.hstack([pred_scaled, np.zeros((1,4))])
     )[0][0]
 
     predicted_aqi = int(calculate_aqi_pm25(pm25_pred))
-
-    st.success(f"🔮 Next Predicted AQI: **{predicted_aqi}**")
+    st.success(f"🔮 Predicted Next AQI: **{predicted_aqi}**")
 
     # ---------------- HEATMAP ----------------
-    st.subheader("🗺️ Average AQI by City")
+    st.subheader("🗺️ India AQI Heatmap")
     heat = df.groupby("city")["PM2.5"].mean().reset_index()
     heat["AQI"] = heat["PM2.5"].apply(calculate_aqi_pm25)
 
@@ -92,4 +90,8 @@ if file:
     out["Predicted_Next_AQI"] = predicted_aqi
 
     st.download_button(
-        "⬇️ Download City AQI CSV",
+        label="⬇️ Download City AQI CSV",
+        data=out.to_csv(index=False),
+        file_name=f"{city}_AQI_Prediction.csv",
+        mime="text/csv"
+    )
