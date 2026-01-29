@@ -1,14 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
+from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 
 # ---------------- CONFIG ----------------
-st.set_page_config(page_title="India AQI LSTM", layout="wide")
-st.title("🇮🇳 India AQI Prediction (LSTM + CPCB)")
+st.set_page_config(page_title="India AQI Prediction", layout="wide")
+st.title("🇮🇳 India AQI Prediction (Classical ML + CPCB)")
 
 # ---------------- AQI (CPCB PM2.5) ----------------
 def pm25_to_aqi(pm):
@@ -51,55 +49,34 @@ st.line_chart(
     city_df.set_index("date")[["PM2.5", "PM10", "NO2", "SO2", "CO"]]
 )
 
-# ---------------- LSTM MODEL ----------------
-WINDOW = 5
-features = ["PM2.5", "PM10", "NO2", "SO2", "CO"]
+# ---------------- ML PREDICTION (NO TENSORFLOW) ----------------
+st.subheader("🤖 AI Forecast (Linear Regression)")
 
-if len(city_df) <= WINDOW:
-    st.warning("Not enough data for LSTM prediction")
-    st.stop()
+city_df["t"] = np.arange(len(city_df))
 
-scaler = MinMaxScaler()
-scaled = scaler.fit_transform(city_df[features])
+X = city_df[["t"]]
+y = city_df["PM2.5"]
 
-X, y = [], []
-for i in range(len(scaled) - WINDOW):
-    X.append(scaled[i:i+WINDOW])
-    y.append(scaled[i+WINDOW][0])
+model = LinearRegression()
+model.fit(X, y)
 
-X, y = np.array(X), np.array(y)
-
-model = Sequential([
-    LSTM(64, return_sequences=True, input_shape=(WINDOW, len(features))),
-    LSTM(32),
-    Dense(1)
-])
-
-model.compile(optimizer="adam", loss="mse")
-model.fit(X, y, epochs=25, batch_size=4, verbose=0)
-
-# ---------------- FORECAST ----------------
-last_seq = scaled[-WINDOW:].reshape(1, WINDOW, len(features))
-pred_scaled = model.predict(last_seq)[0][0]
-
-pm25_pred = scaler.inverse_transform(
-    [[pred_scaled, 0, 0, 0, 0]]
-)[0][0]
-
+future_t = np.array([[len(city_df) + days]])
+pm25_pred = model.predict(future_t)[0]
 aqi_pred = int(pm25_to_aqi(pm25_pred))
 
-st.subheader("🤖 AI Forecast")
-st.success(f"Predicted PM2.5: {pm25_pred:.1f}")
+st.success(f"Predicted PM2.5 after {days} days: {pm25_pred:.1f}")
 st.success(f"Predicted AQI: {aqi_pred}")
 
 # ---------------- HEATMAP ----------------
 st.subheader("🗺 India AQI Comparison")
+
 heat = df.groupby("city")["PM2.5"].mean().reset_index()
 heat["AQI"] = heat["PM2.5"].apply(pm25_to_aqi)
 
-fig, ax = plt.subplots(figsize=(8,5))
+fig, ax = plt.subplots(figsize=(8, 6))
 ax.barh(heat["city"], heat["AQI"])
 ax.set_xlabel("AQI")
+ax.set_ylabel("City")
 st.pyplot(fig)
 
 # ---------------- DOWNLOAD ----------------
