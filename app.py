@@ -89,9 +89,9 @@ if file:
     out["Predicted_Next_PM2.5"] = pm25_pred
     out["Predicted_Next_AQI"] = predicted_aqi
 
-    st.download_button(
+    st.download_button()
         label="⬇️ Download City AQI CSV",
         data=out.to_csv(index=False),
         file_name=f"{city}_AQI_Prediction.csv",
         mime="text/csv"
-    )
+    
