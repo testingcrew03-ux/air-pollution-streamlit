@@ -1,144 +1,116 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+import matplotlib.pyplot as plt
 
-# ---------------- CONFIG ----------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="India AQI AI Platform",
+    page_title="India AQI LSTM Predictor",
     layout="wide"
 )
 
-st.markdown("""
-<style>
-body { background-color: #0E1117; color:white; }
-</style>
-""", unsafe_allow_html=True)
+st.title("🇮🇳 India AQI Prediction System (LSTM)")
+st.caption("Multi-pollutant Deep Learning | CPCB AQI Standard")
 
-# ---------------- LOAD DATA ----------------
-@st.cache_data
-def load_data():
-    df = pd.read_csv("data.csv")
-    df["Date"] = pd.to_datetime(df["Date"])
-    df = df.sort_values("Date")
-    return df
+# ---------------- CPCB AQI FUNCTION (PM2.5) ----------------
+def calculate_aqi_pm25(pm):
+    if pm <= 30: return pm * 50 / 30
+    elif pm <= 60: return 50 + (pm - 30) * 50 / 30
+    elif pm <= 90: return 100 + (pm - 60) * 100 / 30
+    elif pm <= 120: return 200 + (pm - 90) * 100 / 30
+    elif pm <= 250: return 300 + (pm - 120) * 100 / 130
+    else: return 400 + (pm - 250) * 100 / 130
 
-df = load_data()
+# ---------------- FILE UPLOAD ----------------
+uploaded_file = st.file_uploader("📂 Upload Air Quality CSV", type=["csv"])
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("🌍 Controls")
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
 
-city = st.sidebar.selectbox(
-    "Select City",
-    sorted(df["City"].unique())
-)
+    # ---------------- VALIDATION ----------------
+    required_cols = {
+        "date","city","PM2.5","PM10","NO2","SO2","CO"
+    }
 
-days = st.sidebar.slider("Predict Next Days", 3, 14, 7)
+    if not required_cols.issubset(df.columns):
+        st.error("❌ CSV columns do not match required format")
+        st.stop()
 
-city_df = df[df["City"] == city].copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date")
 
-# ---------------- HEADER ----------------
-st.title(f"📍 Air Quality AI Forecast — {city}")
+    # ---------------- CITY SELECTION ----------------
+    city = st.sidebar.selectbox("🏙️ Select City", sorted(df["city"].unique()))
+    city_df = df[df["city"] == city].reset_index(drop=True)
 
-latest = city_df.iloc[-1]
+    st.subheader(f"📊 Historical Pollution — {city}")
+    st.line_chart(
+        city_df.set_index("date")[["PM2.5","PM10","NO2","SO2","CO"]]
+    )
 
-c1, c2, c3 = st.columns(3)
-c1.metric("PM2.5", round(latest["PM2.5"], 1))
-c2.metric("PM10", round(latest["PM10"], 1))
-c3.metric("NO2", round(latest["NO2"], 1))
+    # ---------------- AQI DISPLAY ----------------
+    city_df["AQI"] = city_df["PM2.5"].apply(calculate_aqi_pm25)
+    latest_aqi = int(city_df["AQI"].iloc[-1])
 
-st.caption(f"Last Updated: {latest['Date'].date()}")
+    st.metric("📌 Current CPCB AQI", latest_aqi)
 
-# ---------------- HISTORICAL ----------------
-st.subheader("📈 Historical Trend")
+    # ---------------- LSTM PREPARATION ----------------
+    features = ["PM2.5","PM10","NO2","SO2","CO"]
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(city_df[features])
 
-fig = px.line(
-    city_df,
-    x="Date",
-    y=["PM2.5", "PM10", "NO2"],
-    markers=True
-)
+    window = 5
+    X, y = [], []
 
-st.plotly_chart(fig, use_container_width=True)
+    for i in range(len(scaled) - window):
+        X.append(scaled[i:i+window])
+        y.append(scaled[i+window][0])  # Predict PM2.5
 
-# ---------------- FEATURE ENGINEERING ----------------
-st.subheader("🤖 AI Forecast")
+    X, y = np.array(X), np.array(y)
 
-df_ml = city_df.copy()
-df_ml["PM2.5_lag1"] = df_ml["PM2.5"].shift(1)
-df_ml["PM2.5_lag2"] = df_ml["PM2.5"].shift(2)
-df_ml["PM2.5_lag3"] = df_ml["PM2.5"].shift(3)
+    # ---------------- LSTM MODEL ----------------
+    model = Sequential([
+        LSTM(64, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+        LSTM(32),
+        Dense(1)
+    ])
 
-df_ml.dropna(inplace=True)
+    model.compile(optimizer="adam", loss="mse")
+    model.fit(X, y, epochs=50, batch_size=4, verbose=0)
 
-X = df_ml[[
-    "PM10", "NO2",
-    "PM2.5_lag1",
-    "PM2.5_lag2",
-    "PM2.5_lag3"
-]]
+    # ---------------- PREDICTION ----------------
+    last_window = scaled[-window:]
+    prediction_scaled = model.predict(last_window.reshape(1, window, len(features)))
+    pm25_pred = scaler.inverse_transform(
+        np.hstack([prediction_scaled, np.zeros((1,4))])
+    )[0][0]
 
-y = df_ml["PM2.5"]
+    predicted_aqi = int(calculate_aqi_pm25(pm25_pred))
 
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+    st.success(f"🔮 Next AQI Prediction: **{predicted_aqi}**")
 
-model = RandomForestRegressor(
-    n_estimators=300,
-    random_state=42
-)
+    # ---------------- HEATMAP ----------------
+    st.subheader("🗺️ India AQI Heatmap")
 
-model.fit(X_scaled, y)
+    heat_df = df.groupby("city")["PM2.5"].mean().reset_index()
+    heat_df["AQI"] = heat_df["PM2.5"].apply(calculate_aqi_pm25)
 
-# ---------------- PREDICTION ----------------
-last_row = df_ml.iloc[-1].copy()
-predictions = []
+    fig, ax = plt.subplots()
+    ax.barh(heat_df["city"], heat_df["AQI"])
+    ax.set_xlabel("AQI")
+    ax.set_title("Average AQI by City")
+    st.pyplot(fig)
 
-for _ in range(days):
-    features = np.array([[
-        last_row["PM10"],
-        last_row["NO2"],
-        last_row["PM2.5"],
-        last_row["PM2.5_lag1"],
-        last_row["PM2.5_lag2"]
-    ]])
+    # ---------------- DOWNLOAD ----------------
+    output = city_df.copy()
+    output["Predicted_Next_PM2.5"] = pm25_pred
+    output["Predicted_Next_AQI"] = predicted_aqi
 
-    features_scaled = scaler.transform(features)
-    pred = model.predict(features_scaled)[0]
-    predictions.append(pred)
-
-    last_row["PM2.5_lag2"] = last_row["PM2.5_lag1"]
-    last_row["PM2.5_lag1"] = last_row["PM2.5"]
-    last_row["PM2.5"] = pred
-
-future_dates = pd.date_range(
-    city_df["Date"].max() + pd.Timedelta(days=1),
-    periods=days
-)
-
-pred_df = pd.DataFrame({
-    "Date": future_dates,
-    "Predicted PM2.5": predictions
-})
-
-st.dataframe(pred_df, use_container_width=True)
-
-st.download_button(
-    "📥 Download Prediction CSV",
-    pred_df.to_csv(index=False),
-    "pm25_predictions.csv",
-    "text/csv"
-)
-
-# ---------------- FORECAST CHART ----------------
-fig2 = px.line(
-    pred_df,
-    x="Date",
-    y="Predicted PM2.5",
-    markers=True,
-    title="AI PM2.5 Forecast"
-)
-
-st.plotly_chart(fig2, use_container_width=True)
+    st.download_button(
+        "⬇️ Download City AQI Data",
+        output.to_csv(index=False),
+        file_name=f"{city}_AQI_Predictions.csv"
+    )
