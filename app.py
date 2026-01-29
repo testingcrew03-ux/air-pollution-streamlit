@@ -1,121 +1,144 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
 
-# ---------------- PAGE CONFIG ----------------
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import Pipeline
+
+# -------------------- PAGE CONFIG --------------------
 st.set_page_config(
-    page_title="Air Pollution Monitoring System",
+    page_title="AI Air Pollution Dashboard",
     page_icon="🌍",
     layout="wide"
 )
 
-# ---------------- CUSTOM DARK UI ----------------
+# -------------------- DARK MODE CSS --------------------
 st.markdown("""
 <style>
-body { background-color: #0E1117; color: white; }
-.metric-container { background-color: #1c1f26; }
+body { background-color: #0e1117; color: white; }
+[data-testid="stMetric"] { background-color: #1e222a; padding: 10px; border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- LOAD DATA ----------------
+# -------------------- LOAD DATA --------------------
 @st.cache_data
 def load_data():
-    return pd.read_csv("air_quality.csv")
+    df = pd.read_csv("air_quality.csv")
+    df["date"] = pd.to_datetime(df["date"])
+    return df
 
 df = load_data()
 
-# Fix column names
-df.columns = df.columns.str.strip()
+# -------------------- SIDEBAR --------------------
+st.sidebar.header("⚙️ Controls")
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("🌍 Air Pollution Dashboard")
-city = st.sidebar.selectbox("🏙️ Select City", df["City"].unique())
+city = st.sidebar.selectbox("🏙️ Select City", df["city"].unique())
 pollutant = st.sidebar.selectbox(
     "🧪 Select Pollutant",
     ["PM2.5", "PM10", "NO2", "SO2", "CO"]
 )
 
-# ---------------- FILTER DATA ----------------
-city_df = df[df["City"] == city]
-current_value = city_df[pollutant].values[0]
+predict_days = st.sidebar.slider("📅 Predict next days", 3, 15, 7)
 
-# ---------------- METRICS ----------------
-st.markdown("## 📊 Current Pollution Status")
+# -------------------- FILTER DATA --------------------
+df_city = df[df["city"] == city].sort_values("date")
 
-c1, c2, c3 = st.columns(3)
-c1.metric("🏙️ City", city)
-c2.metric("🧪 Pollutant", pollutant)
-c3.metric("📍 Current Value", current_value)
+# -------------------- TITLE --------------------
+st.title("🌍 AI-Based Air Pollution Monitoring")
+st.subheader(f"📍 {city} — {pollutant}")
 
-# ---------------- HEALTH STATUS ----------------
-st.markdown("### 🚨 Health Advisory")
+# -------------------- CURRENT METRICS --------------------
+latest_value = df_city[pollutant].iloc[-1]
 
-if current_value <= 50:
-    st.success("🟢 Good – Safe for everyone")
-elif current_value <= 100:
-    st.warning("🟡 Moderate – Sensitive groups take care")
-else:
-    st.error("🔴 Poor – Health risk for all")
+col1, col2, col3 = st.columns(3)
+col1.metric("Latest Value", f"{latest_value}")
+col2.metric("Max", f"{df_city[pollutant].max()}")
+col3.metric("Min", f"{df_city[pollutant].min()}")
 
-# ---------------- BAR CHART ----------------
-st.markdown("### 📈 Pollution Comparison (All Cities)")
-st.bar_chart(df.set_index("City")[pollutant])
+# -------------------- HEALTH ALERTS --------------------
+st.subheader("🚨 Health Advisory")
 
-# ---------------- MACHINE LEARNING ----------------
-st.markdown("## 🔮 ML-Based Pollution Prediction")
+if pollutant == "PM2.5":
+    if latest_value <= 50:
+        st.success("✅ Air quality is Good")
+    elif latest_value <= 100:
+        st.warning("⚠️ Moderate – Sensitive groups be careful")
+    else:
+        st.error("🚨 Unhealthy – Avoid outdoor activities")
 
-# Create synthetic time steps for ML
-X = np.arange(len(df)).reshape(-1, 1)
-y = df[pollutant].values
+elif pollutant == "PM10":
+    if latest_value <= 100:
+        st.success("✅ Acceptable air quality")
+    elif latest_value <= 250:
+        st.warning("⚠️ Moderate pollution")
+    else:
+        st.error("🚨 Very unhealthy air")
 
-model = LinearRegression()
+# -------------------- HISTORICAL TREND --------------------
+st.subheader("📈 Historical Trend")
+st.line_chart(df_city.set_index("date")[pollutant])
+
+# -------------------- ML PREDICTION --------------------
+st.subheader("🤖 AI Prediction (Improved Accuracy)")
+
+df_city = df_city.copy()
+df_city["day_number"] = np.arange(len(df_city))
+
+X = df_city[["day_number"]]
+y = df_city[pollutant]
+
+model = Pipeline([
+    ("poly", PolynomialFeatures(degree=2)),
+    ("lr", LinearRegression())
+])
+
 model.fit(X, y)
 
-y_pred = model.predict(X)
-accuracy = r2_score(y, y_pred)
+future_days = np.arange(len(df_city), len(df_city) + predict_days).reshape(-1, 1)
+predictions = model.predict(future_days)
 
-st.metric("📊 Model Accuracy (R²)", round(accuracy, 2))
+future_dates = pd.date_range(
+    start=df_city["date"].max() + pd.Timedelta(days=1),
+    periods=predict_days
+)
 
-# Predict next value
-future_step = np.array([[len(df) + 1]])
-future_prediction = model.predict(future_step)[0]
-
-st.success(f"📌 Predicted Future {pollutant}: **{round(future_prediction, 2)}**")
-
-# ---------------- HEALTH ALERT (PREDICTED) ----------------
-st.markdown("### 🚨 Predicted Health Alert")
-
-if future_prediction > 150:
-    st.error("🚨 Severe pollution expected!")
-elif future_prediction > 100:
-    st.warning("⚠️ Pollution may become unhealthy.")
-else:
-    st.success("✅ Pollution levels expected to remain safe.")
-
-# ---------------- DOWNLOAD CSV ----------------
-st.markdown("### 📥 Download Prediction")
-
-download_df = pd.DataFrame({
-    "City": [city],
-    "Pollutant": [pollutant],
-    "Current Value": [current_value],
-    "Predicted Value": [future_prediction]
+prediction_df = pd.DataFrame({
+    "date": future_dates,
+    "Predicted Value": predictions
 })
 
-csv = download_df.to_csv(index=False).encode("utf-8")
+st.line_chart(prediction_df.set_index("date"))
+
+# -------------------- DOWNLOAD CSV --------------------
+st.subheader("📥 Download Prediction")
+
+csv = prediction_df.to_csv(index=False).encode("utf-8")
 st.download_button(
     "⬇️ Download Prediction CSV",
     csv,
-    "prediction.csv",
-    "text/csv"
+    file_name=f"{city}_{pollutant}_prediction.csv",
+    mime="text/csv"
 )
 
-# ---------------- FOOTER ----------------
+# -------------------- CITY COMPARISON --------------------
+st.subheader("📊 City Comparison")
+
+city2 = st.selectbox(
+    "Compare with another city",
+    [c for c in df["city"].unique() if c != city]
+)
+
+df_city2 = df[df["city"] == city2].sort_values("date")
+
+col1, col2 = st.columns(2)
+
+col1.write(f"### {city}")
+col1.line_chart(df_city.set_index("date")[pollutant])
+
+col2.write(f"### {city2}")
+col2.line_chart(df_city2.set_index("date")[pollutant])
+
+# -------------------- FOOTER --------------------
 st.markdown("---")
-st.markdown(
-    "👨‍💻 **AI-Based Air Pollution Monitoring System**  \n"
-    "Built using Streamlit & Machine Learning"
-)
-
+st.caption("🚀 AI Air Pollution Dashboard | Built with Streamlit & ML")
