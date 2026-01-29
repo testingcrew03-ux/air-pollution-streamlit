@@ -3,5 +3,4 @@ pandas
 numpy
 scikit-learn
 matplotlib
-seaborn
-tensorflow==2.15.0
+tensorflow
