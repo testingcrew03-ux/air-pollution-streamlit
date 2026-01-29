@@ -53,7 +53,11 @@ st.subheader(f"📍 Current Air Quality in {city}")
 col1, col2, col3 = st.columns(3)
 col1.metric("Pollutant", pollutant)
 col2.metric("Latest Value", round(latest_value, 2))
-col3.metric("Last Updated", city_df["date"].max().date())
+col3.metric(
+    "Last Updated",
+    city_df["date"].max().strftime("%d %b %Y")
+)
+
 
 # ---------------- HEALTH ALERTS ----------------
 def health_status(value, pollutant):
